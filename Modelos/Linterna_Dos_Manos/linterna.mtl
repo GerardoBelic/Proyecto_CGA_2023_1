@@ -1,0 +1,76 @@
+# Blender MTL File: 'None'
+# Material Count: 6
+
+newmtl Материал
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.045455 0.045455 0.045455
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Bump -bm 0.200000 metal4\\TexturesCom_Plastic_Shiny_1K_normal.tif
+map_Kd metal4\\TexturesCom_Plastic_Shiny_1K_albedo.tif
+map_Ns metal4\\TexturesCom_Plastic_Shiny_1K_roughness.tif
+
+newmtl Материал.001
+Ns 0.000000
+Ka 0.120000 0.120000 0.120000
+Kd 0.799103 0.423268 0.007499
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd base.png
+
+newmtl Материал.003
+Ns 323.999994
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd reflejo.png
+
+newmtl Материал.004
+Ns 900.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.799103 0.799103 0.799103
+Ks 0.553719 0.553719 0.553719
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd reflejo.png
+
+newmtl Материал.006
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Bump metal5\\TexturesCom_Various_EletricConduit_512_normal.tif
+map_Kd metal5\\TexturesCom_Various_EletricConduit_512_albedo.tif
+map_Ns metal5\\TexturesCom_Various_EletricConduit_512_roughness.tif
+refl metal5\\TexturesCom_Various_EletricConduit_512_height.tif
+
+newmtl Материал.007
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Bump metal3\\TexturesCom_Pavement_Tactile4_1K_normal.tif
+map_Kd metal3\\TexturesCom_Pavement_Tactile4_1K_albedo.tif
+map_Ns metal3\\TexturesCom_Pavement_Tactile4_1K_roughness.tif
+refl metal3\\TexturesCom_Pavement_Tactile4_1K_height.tif

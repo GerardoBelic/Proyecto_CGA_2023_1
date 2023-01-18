@@ -1,0 +1,29 @@
+.vs
+*/*/Debug/*
+*/*/Release/*
+*/Debug/*
+*/Release/*
+Debug/*
+Release/*
+Debug/*.exe
+Release/*.exe
+Debug/*.ilk
+Release/*.ilk
+Debug/*.pdb
+Release/*.pbd
+CGALib/ide/CGALib/Debug/*
+RemoteSystemsTempFiles/
+.metadata/
+
+Modelos/5_1 Handler/
+Modelos/Animations/
+Modelos/classic-jill-valentine/
+Modelos/COD MW 2019 Domino Cataclysm 10.1/
+Modelos/Domino/
+Modelos/Fortnite - Yellow Jacket/
+Modelos/Ghoulreaver/
+Modelos/Linterna/
+Modelos/Pistola/
+Modelos/RE2_Ada/
+Modelos/RE2R_AdaWong_Dress/
+Modelos/RE3 Remake - Jill Valentine/
