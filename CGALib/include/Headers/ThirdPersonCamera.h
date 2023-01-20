@@ -35,12 +35,21 @@ public:
     void mouseMoveCamera(float xoffset, float yoffset, float dt);
     void scrollMoveCamera(float soffset, float dt);
     void updateCamera();
+
     void setHeight(float _height)
     {
         height = _height;
     }
 
     float height = 3.0f;
+
+    bool apuntar = false;
+
+    void setApuntar(bool state)
+    {
+        apuntar = state;
+    }
+ 
 };
 
 #endif // THIRDPERSONCAMERA_H

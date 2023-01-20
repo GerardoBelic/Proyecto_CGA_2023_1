@@ -28,6 +28,15 @@ void ThirdPersonCamera::mouseMoveCamera(float xoffset, float yoffset, float dt){
         pitch = M_PI / 2 - 0.01;
     if(pitch < -M_PI / 2)
         pitch = -M_PI / 2 + 0.01;
+
+    if (apuntar)
+    {
+        if (pitch > glm::radians(38.0f))
+            pitch = glm::radians(38.0f) - 0.001f;
+        else if (pitch < glm::radians(-38.0f))
+            pitch = glm::radians(-38.0f) + 0.001f;
+    }
+
     updateCamera();
 }
 
@@ -37,6 +46,7 @@ void ThirdPersonCamera::scrollMoveCamera(float soffset, float dt){
     // Calculate zoom
     float zoomLevel = soffset * cameraSpeed;
     distanceFromTarget -= zoomLevel;
+
     updateCamera();
 }
 
@@ -76,6 +86,15 @@ void ThirdPersonCamera::updateCamera() {
     right = glm::normalize(glm::cross(front, worldUp));
     up = glm::normalize(glm::cross(right, front));
 
-    position = cameraTarget - front * distanceFromTarget + glm::vec3(0.0f, height, 0.0f) + right * 0.9f;
+    if (!apuntar)
+        position = cameraTarget - front * distanceFromTarget + glm::vec3(0.0f, height, 0.0f) + right * 0.9f;
+    else
+    {
+        //float distance_up = height * std::cos(pitch);
+        //float distance_front = height * std::sin(pitch);
+        position = cameraTarget + right * 0.9f - front * 2.0f + /*front * distance_front +*/ up * height;
+
+    }
+        
     
 }

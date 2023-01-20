@@ -76,7 +76,8 @@ private:
 
 public:
 	std::vector<Mesh*> meshes;
-	std::vector<Texture*> textureLoaded;
+	//std::vector<Texture*> textureLoaded;
+	static std::map<std::string, Texture*> textureLoaded;
 	std::string directory;
 	//std::vector<Bones> vecBones;
 	glm::mat4 m_GlobalInverseTransform;

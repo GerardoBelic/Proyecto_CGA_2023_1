@@ -29,8 +29,8 @@ Model::~Model() {
 		delete this->meshes[i]->bones;
 		delete this->meshes[i];
 	}
-	for (int i = 0; i < this->textureLoaded.size(); i++)
-		delete this->textureLoaded[i];
+	/*for (int i = 0; i < this->textureLoaded.size(); i++)
+		delete this->textureLoaded[i];*/
 }
 
 float Model::render(glm::mat4 parentTrans, float timeReset) {
@@ -511,23 +511,30 @@ Mesh * Model::processMesh(aiMesh* mesh, const aiScene* scene) {
 //	return meshModel;
 //}
 
+std::map<std::string, Texture*> Model::textureLoaded;
+
 std::vector<Texture*> Model::loadMaterialTextures(aiMaterial* mat,
 		aiTextureType type, std::string typeName) {
 	std::vector<Texture*> textures;
 	for (GLuint i = 0; i < mat->GetTextureCount(type); i++) {
 		aiString str;
-		std::cout << "(get texture->";
+		//std::cout << "(get texture->";
 		mat->GetTexture(type, i, &str);
 		// Verifica si la textura fue cargada antes y si es as�, continua con la siguiente iteracion: en caso controaio se salta la carga
 		GLboolean skip = false;
-		for (GLuint j = 0; j < textureLoaded.size(); j++) {
+		/*for (GLuint j = 0; j < textureLoaded.size(); j++) {
 			if (textureLoaded[j]->getFileName() == str.C_Str()) {
 				textures.push_back(textureLoaded[j]);
 				skip = true;
 				break;
 			}
+		}*/
+		if (textureLoaded.find(str.C_Str()) != textureLoaded.end())
+		{
+			textures.push_back(textureLoaded[str.C_Str()]);
+			skip = true;
 		}
-		std::cout << "verified done->";
+		//std::cout << "verified done->";
 		if (!skip) {
 			std::string filename = std::string(str.C_Str());
 			filename = this->directory + '/' + filename;
@@ -535,9 +542,10 @@ std::vector<Texture*> Model::loadMaterialTextures(aiMaterial* mat,
 			texture->load();
 			texture->setType(typeName);
 			textures.push_back(texture);
-			this->textureLoaded.push_back(texture); // Store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
+			//this->textureLoaded.push_back(texture); // Store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
+			textureLoaded[str.C_Str()] = texture;
 		}
-		std::cout << "skip done)";
+		//std::cout << "skip done)";
 	}
 	return textures;
 }
