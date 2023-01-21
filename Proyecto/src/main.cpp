@@ -105,6 +105,7 @@ struct Generador
 		glm::mat4 mat(1.0f);
 
 		mat[3] = glm::vec4(posicion, 1.0f);
+		mat = glm::scale(mat, glm::vec3(3.0f));
 
 		modelo.render(mat);
 	}
@@ -4394,7 +4395,7 @@ void renderScene(bool renderParticles){
 }
 
 int main(int argc, char **argv) {
-	init(1920, 1080, "Lights Out", false);
+	init(800, 700, "Lights Out", false);
 	applicationLoop();
 	destroy();
 	return 1;
