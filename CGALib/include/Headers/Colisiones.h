@@ -67,33 +67,6 @@ void addOrUpdateCollisionDetection(std::map<std::string, bool> &collisionDetecto
 		collisionDetector[name] = isCollision;
 }
 
-bool raySphereIntersect(glm::vec3 orig, glm::vec3 dest, glm::vec3 dir, AbstractModel::SBB sbb, float &t) {
-	// Vector del Origen del rayo al centro de la esfera.
-	glm::vec3 vDirToSphere = sbb.c - orig;
-
-	// Distancia del origen al destino del rayo.
-	float fLineLength = glm::distance(orig, dest);
-
-	// Proyección escalar de vDirToSphere sobre la direccion del rayo.
-	t = glm::dot(vDirToSphere, dir);
-
-	glm::vec3 vClosestPoint;
-	// Si la distancia proyectada del origen es menor o igual que cero
-	// Significa que el punto mas cercano al centro es el origen.
-	if (t <= 0.0f)
-		vClosestPoint = orig;
-	// Si la proyección escalar del origen es mayor a distancia del origen
-	// al destino, el punto mas cercano es el destino.
-	else if (t >= fLineLength)
-		vClosestPoint = dest;
-	// En caso contrario de calcula el punto sobre la linea usando t.
-	else
-		vClosestPoint = orig + dir * (t);
-
-	// Se pureba si el punto mas cercao esta contenido en el radio de la esfera.
-	return glm::distance(sbb.c, vClosestPoint) <= sbb.ratio;
-}
-
 bool testSphereSphereIntersection(AbstractModel::SBB sbb1, AbstractModel::SBB sbb2) {
 	float d = glm::distance(sbb1.c, sbb2.c);
 	/*float d = sqrt(
@@ -260,7 +233,7 @@ bool intersectSegmentAABB(glm::vec3 origen, glm::vec3 target, AbstractModel::AAB
 	if (!testSLABPlane(origen.z, d.z, aabb.mins.z, aabb.maxs.z, tmin, tmax))
 		return false;
 
-	//std::cout << tmin << " " << tmax << std::endl;
+	std::cout << tmin << " " << tmax << std::endl;
 
 	// Esto es para detectar colision con May
 	//if (tmin >= 0.0f && tmax <= glm::distance(origen, target))
@@ -269,12 +242,43 @@ bool intersectSegmentAABB(glm::vec3 origen, glm::vec3 target, AbstractModel::AAB
 		//std::cout << tmin << " " << tmax << std::endl;
 		return true;
 	}
+	/*if(tmax >= 0.0f)
+	{
+		return true;
+	}*/
 
 	return false;
 
 	// Si se llega aqui, hay colision entre el rayo y la caja
 	glm::vec3 pint = origen + d * tmin;
 
+}
+
+bool raySphereIntersect(glm::vec3 orig, glm::vec3 dest, glm::vec3 dir, AbstractModel::SBB sbb, float& t) {
+	// Vector del Origen del rayo al centro de la esfera.
+	glm::vec3 vDirToSphere = sbb.c - orig;
+
+	// Distancia del origen al destino del rayo.
+	float fLineLength = glm::distance(orig, dest);
+
+	// Proyección escalar de vDirToSphere sobre la direccion del rayo.
+	t = glm::dot(vDirToSphere, dir);
+
+	glm::vec3 vClosestPoint;
+	// Si la distancia proyectada del origen es menor o igual que cero
+	// Significa que el punto mas cercano al centro es el origen.
+	if (t <= 0.0f)
+		vClosestPoint = orig;
+	// Si la proyección escalar del origen es mayor a distancia del origen
+	// al destino, el punto mas cercano es el destino.
+	else if (t >= fLineLength)
+		vClosestPoint = dest;
+	// En caso contrario de calcula el punto sobre la linea usando t.
+	else
+		vClosestPoint = orig + dir * (t);
+
+	// Se pureba si el punto mas cercao esta contenido en el radio de la esfera.
+	return glm::distance(sbb.c, vClosestPoint) <= sbb.ratio;
 }
 
 bool rayOBBIntersect(glm::vec3 origen, glm::vec3 target, AbstractModel::OBB obb)

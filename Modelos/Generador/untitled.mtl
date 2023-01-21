@@ -1,0 +1,76 @@
+# Blender MTL File: 'untitled.blend'
+# Material Count: 7
+
+newmtl Air_Duct_Rubber.001
+Ns 323.999994
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl Black_Plastic
+Ns 249.999987
+Ka 1.000000 1.000000 1.000000
+Kd 0.000000 0.000000 0.000000
+Ks 0.272727 0.272727 0.272727
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl Bulb_Emmision_Light
+Ns 900.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.508881 0.381326 0.155926
+Ks 0.000000 0.000000 0.000000
+Ke 2.000000 2.000000 2.000000
+Ni 1.450000
+d 1.000000
+illum 1
+
+newmtl Fine_leather_black
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd assets/materials/fine_leather_black_55e4972c-3c77-40f0-a7ff-27192e5eded5/textures/Fine_leather_black_Base Color.png
+map_Ks assets/materials/fine_leather_black_55e4972c-3c77-40f0-a7ff-27192e5eded5/textures/Fine_leather_black_Specular.png
+map_Ns assets/materials/fine_leather_black_55e4972c-3c77-40f0-a7ff-27192e5eded5/textures/Fine_leather_black_Roughness.png
+refl assets/materials/fine_leather_black_55e4972c-3c77-40f0-a7ff-27192e5eded5/textures/Fine_leather_black_Metallic.png
+
+newmtl Metal.001
+Ns 643.314047
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+
+newmtl Procedural_Copper_Material
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+
+newmtl Rusty_painted_metal
+Ns 319.109502
+Ka 0.750000 0.750000 0.750000
+Kd 1.000000 0.840672 0.784927
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.490000
+d 1.000000
+illum 3

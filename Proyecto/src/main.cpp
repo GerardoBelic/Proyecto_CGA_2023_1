@@ -11,8 +11,9 @@
 #include <algorithm>
 #include <random>
 #include <numeric>
-
+#include <vector>
 #include <thread>
+#include <coroutine>
 
 //glfw include
 #include <GLFW/glfw3.h>
@@ -59,6 +60,59 @@
 
 #define ARRAY_SIZE_IN_ELEMENTS(a) (sizeof(a)/sizeof(a[0]))
 
+float getRandomUniformFloat()
+{
+
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+	return dist(gen);
+
+}
+
+float getRandomNormalFloat()
+{
+
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::normal_distribution<float> dist(0.0f, 1.0f);
+
+	return dist(gen);
+
+}
+
+float scaleTerrain = 8.0f;
+
+// Terrain model instance
+Terrain terrain(-1, -1, 200 * scaleTerrain, 16 * scaleTerrain, "../Textures/Terreno/heightmap.png");
+
+struct Generador
+{
+
+	glm::vec3 posicion = glm::vec3(0.0f);
+
+	bool activado = false;
+
+	void intentarEncender()
+	{
+		if (getRandomUniformFloat() > 0.75f)
+			activado = true;
+	}
+
+	void render(Model& modelo)
+	{
+		glm::mat4 mat(1.0f);
+
+		mat[3] = glm::vec4(posicion, 1.0f);
+
+		modelo.render(mat);
+	}
+
+};
+
+std::vector<Generador> generadores;
+
 struct AccionesPersonaje
 {
 	
@@ -78,6 +132,10 @@ struct AccionesPersonaje
 	bool correr = false;
 	bool agacharse = false;
 	bool apuntar = false;
+	bool encendiendo = false;
+	bool golpeada = false;
+
+	int generador_interaccion = -1;
 
 } accionesPersonaje;
 
@@ -110,7 +168,8 @@ struct EstadoPersonaje
 		Levantarse_apuntando,
 		Recibir_golpe,
 		Muriendo,
-		Muerto
+		Muerto,
+		Encenciendo_generador
 	};
 
 	std::map<Estados_Personaje, Model*> mapaAcciones;
@@ -136,7 +195,8 @@ struct EstadoPersonaje
 		{Estados_Personaje::Levantarse_apuntando, "Levantarse_apuntando"},
 		{Estados_Personaje::Recibir_golpe, "Recibir_golpe"},
 		{Estados_Personaje::Muriendo, "Muriendo"},
-		{Estados_Personaje::Muerto, "Muerto"}
+		{Estados_Personaje::Muerto, "Muerto"},
+		{Estados_Personaje::Encenciendo_generador, "Encendiendo_generador"}
 	};
 
 	void mapearAccion(Estados_Personaje estado, Model& modelo)
@@ -169,6 +229,8 @@ struct EstadoPersonaje
 		return offsetTime;
 	}
 
+	float lastHit = 0.0f;
+
 	void actualizarEstado(AccionesPersonaje &acciones)
 	{
 		using enum Estados_Personaje;
@@ -176,6 +238,16 @@ struct EstadoPersonaje
 
 		switch (estado_actual)
 		{
+		case Encenciendo_generador:
+
+			if (porcentajeAnimacion > 0.98f)
+			{
+				generadores[acciones.generador_interaccion].intentarEncender();
+				
+				estado_actual = Idle;
+			}
+
+			break;
 			
 		case Idle:
 		case Caminar_adelante:
@@ -184,10 +256,10 @@ struct EstadoPersonaje
 		case Caminar_derecha:
 		case Correr:
 
-			/*if (recibioGolpe())
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
 			{
-				// bajarSalud();
-				if (salud < 0.0)
+				--salud;
+				if (salud <= 0)
 				{
 					estado_actual = Muriendo;
 				}
@@ -196,7 +268,12 @@ struct EstadoPersonaje
 					estado_actual = Recibir_golpe;
 				}
 			}
-			else*/ if (acciones.saltar)
+			else if (acciones.encendiendo && !generadores[accionesPersonaje.generador_interaccion].activado)
+			{
+				resetTimer();
+				estado_actual = Encenciendo_generador;
+			}
+			else if (acciones.saltar)
 			{
 				resetTimer();
 				estado_actual = Saltar;
@@ -240,7 +317,19 @@ struct EstadoPersonaje
 			static float prev_time = TimeManager::Instance().GetRunningTime();
 			float curr_time = TimeManager::Instance().GetRunningTime();
 
-			if (porcentajeAnimacion < 0.3f)
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			{
+				--salud;
+				if (salud <= 0)
+				{
+					estado_actual = Muriendo;
+				}
+				else
+				{
+					estado_actual = Recibir_golpe;
+				}
+			}
+			else if (porcentajeAnimacion < 0.3f)
 			{
 				saltar_listo = false;
 				pausar_movimiento = true;
@@ -287,7 +376,19 @@ struct EstadoPersonaje
 
 		case Desenfundar:
 
-			if (porcentajeAnimacion > 0.98f)
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			{
+				--salud;
+				if (salud <= 0)
+				{
+					estado_actual = Muriendo;
+				}
+				else
+				{
+					estado_actual = Recibir_golpe;
+				}
+			}
+			else if (porcentajeAnimacion > 0.98f)
 			{
 				estado_actual = Apuntar_idle;
 			}
@@ -297,7 +398,19 @@ struct EstadoPersonaje
 
 		case Enfundar:
 
-			if (porcentajeAnimacion > 0.98f)
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			{
+				--salud;
+				if (salud <= 0)
+				{
+					estado_actual = Muriendo;
+				}
+				else
+				{
+					estado_actual = Recibir_golpe;
+				}
+			}
+			else if (porcentajeAnimacion > 0.98f)
 			{
 				estado_actual = Idle;
 			}
@@ -311,10 +424,10 @@ struct EstadoPersonaje
 		case Apuntar_caminando_derecha:
 		case Apuntar_caminando_izquierda:
 
-			/*if (recibioGolpe())
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
 			{
-				// bajarSalud();
-				if (salud < 0.0)
+				--salud;
+				if (salud <= 0)
 				{
 					estado_actual = Muriendo;
 				}
@@ -323,7 +436,7 @@ struct EstadoPersonaje
 					estado_actual = Recibir_golpe;
 				}
 			}
-			else*/ if (acciones.enfundar)
+			else if (acciones.enfundar)
 			{
 				resetTimer();
 				estado_actual = Enfundar;
@@ -359,28 +472,10 @@ struct EstadoPersonaje
 
 		case Agacharse_apuntando:
 
-			if (porcentajeAnimacion > 0.98f)
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
 			{
-				estado_actual = Apuntar_agachado;
-			}
-
-			break;
-
-		case Levantarse_apuntando:
-
-			if (porcentajeAnimacion > 0.98f)
-			{
-				estado_actual = Apuntar_idle;
-			}
-
-			break;
-
-		case Apuntar_agachado:
-
-			/*if (recibioGolpe())
-			{
-				// bajarSalud();
-				if (salud < 0.0)
+				--salud;
+				if (salud <= 0)
 				{
 					estado_actual = Muriendo;
 				}
@@ -389,7 +484,49 @@ struct EstadoPersonaje
 					estado_actual = Recibir_golpe;
 				}
 			}
-			else*/ if (acciones.agacharse)
+			else if (porcentajeAnimacion > 0.98f)
+			{
+				estado_actual = Apuntar_agachado;
+			}
+
+			break;
+
+		case Levantarse_apuntando:
+
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			{
+				--salud;
+				if (salud <= 0)
+				{
+					estado_actual = Muriendo;
+				}
+				else
+				{
+					estado_actual = Recibir_golpe;
+				}
+			}
+			else if (porcentajeAnimacion > 0.98f)
+			{
+				estado_actual = Apuntar_idle;
+			}
+
+			break;
+
+		case Apuntar_agachado:
+
+			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			{
+				--salud;
+				if (salud <= 0)
+				{
+					estado_actual = Muriendo;
+				}
+				else
+				{
+					estado_actual = Recibir_golpe;
+				}
+			}
+			else if (acciones.agacharse)
 			{
 				resetTimer();
 				estado_actual = Levantarse_apuntando;
@@ -402,6 +539,7 @@ struct EstadoPersonaje
 			if (porcentajeAnimacion > 0.98f)
 			{
 				estado_actual = Idle;
+				lastHit = TimeManager::Instance().GetRunningTime();
 			}
 
 			break;
@@ -417,9 +555,9 @@ struct EstadoPersonaje
 
 		}
 
-		std::cout << "Animacion: " << porcentajeAnimacion << "%" << std::endl;
-		std::cout << "\tEstado actual: " << nombreEstados[estado_actual] << std::endl;
-		std::cout << "Movimiento pausado: " << pausar_movimiento << std::endl;
+		//std::cout << "Animacion: " << porcentajeAnimacion << "%" << std::endl;
+		//std::cout << "\tEstado actual: " << nombreEstados[estado_actual] << std::endl;
+		//std::cout << "Movimiento pausado: " << pausar_movimiento << std::endl;
 
 	}
 
@@ -444,7 +582,7 @@ struct EstadoPersonaje
 			break;
 		
 		case Correr:
-			velocidad_nueva = 0.2f;
+			velocidad_nueva = 0.25f;
 
 			break;
 
@@ -563,6 +701,111 @@ struct EstadoPersonaje
 		return false;
 	}
 
+	float multiplicadorDamage()
+	{
+		using enum Estados_Personaje;
+
+		switch (estado_actual)
+		{
+		case Enfundar:
+		case Desenfundar:
+
+			return 1.0f;
+
+			break;
+
+		case Apuntar_caminando_adelante:
+		case Apuntar_caminando_atras:
+		case Apuntar_caminando_izquierda:
+		case Apuntar_caminando_derecha:
+
+			return 1.0f;
+
+			break;
+
+		case Agacharse_apuntando:
+		case Levantarse_apuntando:
+
+			return 1.5f;
+				
+			break;
+
+		case Apuntar_idle:
+
+			return 2.0f;
+
+			break;
+
+		case Apuntar_agachado:
+
+			return 4.0f;
+
+			break;
+
+
+		default:
+
+			return 1.0f;
+
+			break;
+		}
+
+		return 1.0f;
+		
+	}
+
+	std::tuple<float, float, float> intensidadYAngulosLinterna()
+	{
+		using enum Estados_Personaje;
+
+		switch (estado_actual)
+		{
+		case Enfundar:
+		case Desenfundar:
+
+			return {0.72f, 22.0f, 30.0f};
+
+			break;
+
+		case Apuntar_caminando_adelante:
+		case Apuntar_caminando_atras:
+		case Apuntar_caminando_izquierda:
+		case Apuntar_caminando_derecha:
+
+			return {0.86f, 19.0f, 23.0f};
+
+			break;
+
+		case Agacharse_apuntando:
+		case Levantarse_apuntando:
+
+			return { 0.82f, 14.0f, 19.0f };
+
+			break;
+
+		case Apuntar_idle:
+
+			return { 0.92f, 11.0f, 15.0f };
+
+			break;
+
+		case Apuntar_agachado:
+
+			return { 1.0f, 6.0f, 9.0f };
+
+			break;
+
+
+		default:
+
+			return {0.1f, 1.0f, 1.0f};
+
+			break;
+		}
+
+		return {0.1f, 1.0f, 1.0f };
+	}
+
 	bool saltando = false;
 	float tiempo_empezo_salto = 0.0f;
 	bool tiempo_congelado = false;
@@ -574,7 +817,546 @@ struct EstadoPersonaje
 		saltando = false;
 	}
 
+	int salud = 3;
+	std::map<int, int> mapaVidaUI;
+
+	int obtenerTexturaVida()
+	{
+		return mapaVidaUI[salud];
+	}
+
 } estadoPersonaje;
+
+struct Enemigo
+{
+
+	float velocidadBase = 1.0f;
+	float sizeBase = 1.0f;
+	float saludBase = 50.0f;
+
+	std::string id;
+
+	Enemigo(const glm::vec3& posicion, const std::string &_id) :  id(_id)
+	{
+		sizeBase = 0.5f + getRandomUniformFloat() * 1.8f;
+		velocidadBase = 0.7f + getRandomUniformFloat() * 5.0f;
+		saludBase = 50.0f + getRandomUniformFloat() * 100.0f;
+
+		posicionEnemigo = posicion;
+		posicionEnemigo.y = terrain.getHeightTerrain(posicion.x, posicion.z);
+
+		enemyModelMatrix[3] = glm::vec4(posicionEnemigo, 1.0f);
+	}
+
+	void reducirSalud(float damage)
+	{
+		saludBase -= damage * deltaTime * 30.0f;
+	}
+
+	enum class Estados_Enemigo
+	{
+		Idle,			// No moverse
+		Guardia,		// Moverse a un lugar aleatorio caminando
+		Sospecha,		// Quedarse quieto viendo al personaje
+		Persecusion,	// Correr hacia el personaje
+		Atacando,		// Lanzar un golpe (puede asestarlo o no)
+		Muriendo,		// Animacion de morir
+		Muerto			// Desaparición del cuerpo o dejarlo en el último frame
+	};
+
+	float porcentajeAnimacion = -1.0f;
+
+	void setPorcentajeAnimacion(float tiempoAnimacion)
+	{
+		porcentajeAnimacion = tiempoAnimacion;
+	}
+
+	float offsetTime = 0.0f;
+
+	void resetTimer()
+	{
+		offsetTime = TimeManager::Instance().GetRunningTime();
+	}
+
+	glm::vec3 posicionEnemigo;
+	float rotacionEnemigo = 0.0f;
+
+	glm::vec3 randomPosition;
+
+	static float deltaTime;
+
+	void actualizarPosicion(const glm::vec3 &objetivo, float velocidad)
+	{
+		glm::vec3 direccion = objetivo - posicionEnemigo;
+		direccion.y = 0.0f;
+		direccion = glm::normalize(direccion);
+
+		posicionEnemigo += direccion * velocidad * velocidadBase * deltaTime;
+		posicionEnemigo.y = terrain.getHeightTerrain(posicionEnemigo.x, posicionEnemigo.z);
+		//enemyModelMatrix[3] = glm::vec4(glm::vec3(enemyModelMatrix[3]) + direccion * velocidad * velocidadBase * deltaTime, enemyModelMatrix[3][3]);
+		//enemyModelMatrix[3][1] = terrain.getHeightTerrain(enemyModelMatrix[3][0], enemyModelMatrix[3][2]);
+
+		//std::cout << "direccion: " << direccion.x << " " << direccion.z << "\n";
+		//std::cout << "desplazamiento: " << direccion.x * velocidad * deltaTime << " " << direccion.z * velocidad * deltaTime << "\n";
+		//std::cout << "dt: " << deltaTime << "\n";
+
+		//posicionEnemigo = glm::vec3(enemyModelMatrix[3]);
+	}
+
+	void actualizarRotacion(const glm::vec3& objetivo)
+	{
+		glm::vec3 direccion = objetivo - posicionEnemigo;
+		direccion.y = 0.0f;
+		glm::normalize(direccion);
+
+		glm::vec2 v1(direccion.x, direccion.z);
+		glm::vec2 v2(1.0f, 0.0f);
+		//v1 = glm::normalize(v1);
+		//v2 = glm::normalize(v2);
+		float dot = glm::dot(v1, v2);
+		float det = v1.x * v2.y - v2.x * v1.y;
+		float anguloDireccion = std::atan2(det, dot) + M_PI_2;
+
+		rotacionEnemigo = anguloDireccion;
+	}
+
+	Estados_Enemigo estado_actual = Estados_Enemigo::Idle;
+
+	float tiempoInicioIdle;
+	float tiempoIdle;
+
+	float tiempoInicioGuardia;
+	float tiempoGuardia;
+	
+	float tiempoInicioSospecha;
+	float tiempoSospecha;
+
+	bool golpeLanzado = false;
+
+	void actualizarEstado(const glm::vec3 &posicionPersonaje)
+	{
+
+		using enum Estados_Enemigo;
+
+		float distanciaAlPersonaje = glm::distance(posicionEnemigo, posicionPersonaje);
+
+		switch (estado_actual)
+		{
+		case Idle:
+
+			if (saludBase < 0.0f)
+			{
+				resetTimer();
+				estado_actual = Muriendo;
+			}
+			else if (distanciaAlPersonaje < 75.0f)
+			{
+				tiempoSospecha = 0.5f + getRandomUniformFloat() * 3.0f;
+				tiempoInicioSospecha = TimeManager::Instance().GetRunningTime();
+
+				estado_actual = Sospecha;
+			}
+			else if (tiempoInicioIdle + tiempoIdle < TimeManager::Instance().GetRunningTime())
+			{
+				tiempoGuardia = getRandomUniformFloat() * 10.0f;
+				tiempoInicioGuardia = TimeManager::Instance().GetRunningTime();
+
+				randomPosition.x = getRandomUniformFloat() * 1600.0f - 800.0f;
+				randomPosition.z = getRandomUniformFloat() * 1600.0f - 800.0f;
+
+				estado_actual = Guardia;
+			}
+
+			break;
+
+		case Guardia:
+
+			actualizarPosicion(randomPosition, 0.33f);
+			actualizarRotacion(randomPosition);
+
+			if (saludBase < 0.0f)
+			{
+				resetTimer();
+				estado_actual = Muriendo;
+			}
+			else if (distanciaAlPersonaje < 75.0f)
+			{
+				tiempoSospecha = 0.5f + getRandomUniformFloat() * 3.0f;
+				tiempoInicioSospecha = TimeManager::Instance().GetRunningTime();
+
+				estado_actual = Sospecha;
+			}
+			else if (tiempoInicioGuardia + tiempoGuardia < TimeManager::Instance().GetRunningTime())
+			{
+				tiempoIdle = getRandomUniformFloat() * 10.0f;
+				tiempoInicioIdle = TimeManager::Instance().GetRunningTime();
+
+				tiempoGuardia = getRandomUniformFloat() * 10.0f;
+				tiempoInicioGuardia = TimeManager::Instance().GetRunningTime();
+
+				estado_actual = Idle;
+			}
+
+			break;
+
+		case Sospecha:
+
+			actualizarRotacion(posicionPersonaje);
+
+			if (saludBase < 0.0f)
+			{
+				resetTimer();
+				estado_actual = Muriendo;
+			}
+			else if (tiempoInicioSospecha + tiempoSospecha < TimeManager::Instance().GetRunningTime())
+			{
+				if (distanciaAlPersonaje < 75.0f)
+				{
+					estado_actual = Persecusion;
+				}
+				else
+				{
+					if (tiempoInicioIdle + tiempoIdle > TimeManager::Instance().GetRunningTime())
+						estado_actual = Idle;
+					else
+						estado_actual = Guardia;
+				}
+			}
+
+			break;
+
+		case Persecusion:
+
+			actualizarPosicion(posicionPersonaje, 1.0f);
+			actualizarRotacion(posicionPersonaje);
+
+			if (saludBase < 0.0f)
+			{
+				//std::cout << "here" << std::endl;
+				resetTimer();
+				estado_actual = Muriendo;
+			}
+			else if (distanciaAlPersonaje < 1.0f + sizeBase * 1.5f)
+			{
+				resetTimer();
+				estado_actual = Atacando;
+			}
+			else if (distanciaAlPersonaje > 65.0f)
+			{
+				tiempoSospecha = getRandomUniformFloat() * 5.0f;
+				tiempoInicioSospecha = TimeManager::Instance().GetRunningTime();
+
+				estado_actual = Sospecha;
+			}
+
+			break;
+
+		case Atacando:
+
+			actualizarRotacion(posicionPersonaje);
+
+			if (saludBase < 0.0f)
+			{
+				resetTimer();
+				estado_actual = Muriendo;
+			}
+			else if (porcentajeAnimacion > 0.3f && porcentajeAnimacion <= 0.9f && !golpeLanzado)
+			{
+				golpeLanzado = true;
+			}
+			else if (porcentajeAnimacion > 0.9f && porcentajeAnimacion <= 0.98f)
+			{
+				golpeLanzado = false;
+			}
+			else if (porcentajeAnimacion > 0.98f)
+			{
+				estado_actual = Persecusion;
+			}
+
+			break;
+
+		case Muriendo:
+
+			if (porcentajeAnimacion > 0.98f)
+			{
+				estado_actual = Muerto;
+			}
+
+			break;
+
+		case Muerto:
+
+			offsetTime += deltaTime;
+
+			break;
+		}
+
+	}
+
+	bool golpeoPersonaje(const glm::vec3& posicionPersonaje)
+	{
+		if (golpeLanzado && distanciaALaPosicion(posicionPersonaje) < 5.0f)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	float distanciaALaPosicion(const glm::vec3& posicion)
+	{
+		return glm::distance(posicionEnemigo, posicion);
+	}
+
+	static std::map<Estados_Enemigo, Model*> mapaAcciones;
+
+	static void mapearAccion(Estados_Enemigo estado, Model& modelo)
+	{
+		mapaAcciones[estado] = &modelo;
+	}
+
+	glm::mat4 enemyModelMatrix = glm::mat4(1.0f);
+
+	void render()
+	{
+		//glm::mat4 enemyModelBodyMatrix = glm::mat4(enemyModelMatrix);
+		enemyModelMatrix = glm::mat4(1.0f);
+
+		enemyModelMatrix[3] = glm::vec4(posicionEnemigo, 1.0f);
+		enemyModelMatrix = glm::rotate(enemyModelMatrix, rotacionEnemigo, glm::vec3(0.0f, 1.0f, 0.0f));
+		enemyModelMatrix = glm::scale(enemyModelMatrix, glm::vec3(sizeBase));
+
+		porcentajeAnimacion = mapaAcciones[estado_actual]->render(enemyModelMatrix, offsetTime);
+	}
+
+};
+
+std::map<Enemigo::Estados_Enemigo, Model*> Enemigo::mapaAcciones;
+float Enemigo::deltaTime = 1 / 60.0f;
+
+struct Conjunto_Enemigos
+{
+
+	std::vector<Enemigo> enemigosFijos;
+	std::vector<Enemigo> enemigosVariables;
+
+	std::map<std::string, Enemigo*> nameList;
+
+	Conjunto_Enemigos(int numEnemigosFijos, int numEnemigosVariables)
+	{
+		for (int i = 0; i < numEnemigosFijos; ++i)
+		{
+			glm::vec3 posGenerador = generadores[((float)i / (float)numEnemigosFijos) * generadores.size()].posicion;
+			enemigosFijos.emplace_back(posGenerador + glm::vec3(-50.0f + getRandomUniformFloat() * 100.0f, 0.0f, -50.0f + getRandomUniformFloat() * 100.0f), std::to_string(i));
+
+			//renderList[&enemigosFijos[i]] = i;
+			nameList[std::to_string(i)] = &enemigosFijos[i];
+		}
+
+		for (int i = 0; i < numEnemigosVariables; ++i)
+		{
+			enemigosVariables.emplace_back(glm::vec3(-750.0f + getRandomUniformFloat() * 1500.0f, 0.0f, -750.0f + getRandomUniformFloat() * 1500.0f), std::to_string(i + numEnemigosFijos));
+
+			//renderList[&enemigosVariables[i]] = i + numEnemigosFijos;
+			nameList[std::to_string(i + numEnemigosFijos)] = &enemigosVariables[i];
+		}
+	}
+
+	//std::map<Enemigo*, float> renderList;
+	std::map<float, Enemigo*> renderList;
+
+	void actualizarEstado(const glm::vec3& posicionPersonaje)
+	{
+		renderList = std::map<float, Enemigo*>();
+		nameList = std::map<std::string, Enemigo*>();
+
+		for (auto& enemigo : enemigosFijos)
+		{
+			renderList[enemigo.distanciaALaPosicion(posicionPersonaje)] = &enemigo;
+			nameList[enemigo.id] = &enemigo;
+		}
+
+		for (auto& enemigo : enemigosVariables)
+		{
+			renderList[enemigo.distanciaALaPosicion(posicionPersonaje)] = &enemigo;
+			nameList[enemigo.id] = &enemigo;
+		}
+
+		for (auto& enemigo : renderList)
+		{
+			if (enemigo.first > 150.0f)
+				break;
+
+			enemigo.second->actualizarEstado(posicionPersonaje);
+		}
+	}
+
+	void render(const glm::vec3 &posicionPersonaje)
+	{
+		for (auto& enemigo : renderList)
+		{
+			if (enemigo.first > 150.0f)
+				break;
+
+			enemigo.second->render();
+		}
+	}
+
+	std::map<float, Enemigo*>& getEnemiesMap()
+	{
+		return renderList;
+	}
+
+	bool golpeAsestado(const glm::vec3& posicionPersonaje)
+	{
+		for (auto& enemigo : renderList)
+		{
+			if (enemigo.first > 20.0f)
+				break;
+
+			if (enemigo.second->golpeoPersonaje(posicionPersonaje))
+				return true;
+		}
+
+		return false;
+	}
+
+};
+
+Conjunto_Enemigos *enemigos;
+
+struct Planta
+{
+	Planta(const glm::mat4 &mat, const std::string &str) : matrix(mat), id(str)
+	{
+
+	}
+
+	glm::mat4 matrix;
+	std::string id;
+};
+
+struct Vegetacion
+{
+
+	Model* arbol = nullptr;
+	std::vector<Planta> posicionesArboles;
+	std::map<float, Planta*> mapaArboles;
+
+	Model* arbol_2 = nullptr;
+	std::vector<Planta> posicionesArboles_2;
+	std::map<float, Planta*> mapaArboles_2;
+
+	Model* arbusto = nullptr;
+	std::vector<Planta> posicionesArbustos;
+	std::map<float, Planta*> mapaArbustos;
+
+	std::map<float, Planta*> mapaVegetacion;
+
+	Vegetacion(int numCumulos, int numArbolesCumulo, int numArbustos, Model& _arbol, Model& _arbol2, Model& _arbusto) : arbol(&_arbol), arbol_2(&_arbol2), arbusto(&_arbusto)
+	{
+		for (int i = 0; i < numCumulos; ++i)
+		{
+			float x = -750.0f + getRandomUniformFloat() * 1500.0f;
+			float z = -750.0f + getRandomUniformFloat() * 1500.0f;
+
+			for (int j = 0; j < numArbolesCumulo / 2; ++j)
+			{
+				float pos_x = x + getRandomNormalFloat() * 50.0;
+				float pos_z = z + getRandomNormalFloat() * 50.0;
+
+				glm::mat4 arbol(1.0f);
+				arbol[3][0] = pos_x;
+				arbol[3][1] = terrain.getHeightTerrain(pos_x, pos_z);
+				arbol[3][2] = pos_z;
+				arbol = glm::scale(arbol, glm::vec3(3.0f));
+
+				posicionesArboles.emplace_back(arbol, std::string("arbol_") + std::to_string(i));
+			}
+
+			for (int j = 0; j < numArbolesCumulo / 2; ++j)
+			{
+				float pos_x = x + getRandomNormalFloat() * 50.0;
+				float pos_z = z + getRandomNormalFloat() * 50.0;
+
+				glm::mat4 arbol(1.0f);
+				arbol[3][0] = pos_x;
+				arbol[3][1] = terrain.getHeightTerrain(pos_x, pos_z);
+				arbol[3][2] = pos_z;
+				arbol = glm::rotate(arbol, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+				arbol = glm::scale(arbol, glm::vec3(3.0f));
+
+				posicionesArboles_2.emplace_back(arbol, std::string("arbol2_") + std::to_string(i));
+			}
+
+		}
+
+		for (int i = 0; i < numArbustos; ++i)
+		{
+			glm::mat4 veg(1.0f);
+			veg[3] = glm::vec4(-750.0f + getRandomUniformFloat() * 1500.0f, 0.0f, -750.0f + getRandomUniformFloat() * 1500.0f, 1.0f);
+			veg[3][1] = terrain.getHeightTerrain(veg[3][0], veg[3][2]);
+			veg = glm::scale(veg, glm::vec3(2.0f + getRandomUniformFloat() * 2.0f));
+
+			posicionesArbustos.emplace_back(veg, std::string("arbusto_") + std::to_string(i));
+		}
+	}
+
+	void render(const glm::vec3 &posicionPersonaje)
+	{
+		mapaArboles = std::map<float, Planta*>();
+		for (auto& mat : posicionesArboles)
+		{
+			float distance = glm::distance(glm::vec3(mat.matrix[3]), posicionPersonaje);
+			mapaArboles[distance] = &mat;
+		}
+		for (auto& vegetal : mapaArboles)
+		{
+			if (vegetal.first > 450.0f)
+				break;
+
+			arbol->render(vegetal.second->matrix);
+		}
+
+		mapaArboles_2 = std::map<float, Planta*>();
+		for (auto& mat : posicionesArboles_2)
+		{
+			float distance = glm::distance(glm::vec3(mat.matrix[3]), posicionPersonaje);
+			mapaArboles_2[distance] = &mat;
+		}
+		for (auto& vegetal : mapaArboles_2)
+		{
+			if (vegetal.first > 450.0f)
+				break;
+
+			arbol_2->render(vegetal.second->matrix);
+		}
+
+		mapaArbustos = std::map<float, Planta*>();
+		for (auto& mat : posicionesArbustos)
+		{
+			float distance = glm::distance(glm::vec3(mat.matrix[3]), posicionPersonaje);
+			mapaArbustos[distance] = &mat;
+		}
+		for (auto& vegetal : mapaArbustos)
+		{
+			if (vegetal.first > 450.0f)
+				break;
+
+			arbusto->render(vegetal.second->matrix);
+		}
+
+
+		mapaVegetacion = std::map<float, Planta*>();
+		mapaVegetacion.insert(mapaArboles.begin(), mapaArboles.end());
+		mapaVegetacion.insert(mapaArboles_2.begin(), mapaArboles_2.end());
+		mapaVegetacion.insert(mapaArbustos.begin(), mapaArbustos.end());
+
+	}
+
+};
+
+Vegetacion *vegetacion;
 
 int screenWidth;
 int screenHeight;
@@ -603,7 +1385,7 @@ Shader shaderDepth;
 Shader shaderTexture;
 
 std::shared_ptr<Camera> camera(new ThirdPersonCamera());
-float distanceFromTarget = 7.0;
+float distanceFromTarget = 4.5f;
 
 Sphere skyboxSphere(20, 20);
 Box boxCollider;
@@ -648,6 +1430,10 @@ Model modelFountain;
 // Mayow
 Model mayowModelAnimate;
 
+Model modelFlecha;
+
+Model modelGenerador;
+
 // Animations of Ada
 Model modelAda_base;
 Model modelAda_agacharse_apuntando;
@@ -670,19 +1456,25 @@ Model modelAda_muerta;
 Model modelAda_muriendo;
 Model modelAda_recibir_golpe;
 Model modelAda_saltar;
+Model modelAda_encender_generador;
 
 Model modelLinterna;
 Model modelEsfera;
 
 // Animations of Monsters
-Model modelPhantom;
+Model modelPhantom_ataque;
+Model modelPhantom_caminar;
+Model modelPhantom_correr;
+Model modelPhantom_idle;
+Model modelPhantom_muriendo;
 
-float scaleTerrain = 8.0f;
-
-// Terrain model instance
-Terrain terrain(-1, -1, 200 * scaleTerrain, 16 * scaleTerrain, "../Textures/Terreno/heightmap.png");
+// Vegetacion
+Model modelArbol;
+Model modelArbol_2;
+Model modelArbusto;
 
 GLuint textureCespedID, textureWallID, textureWindowID, textureHighwayID, textureLandingPadID;
+GLuint vida3_ID, vida2_ID, vida1_ID, vida0_ID;
 GLuint textureTerrainBackgroundID, textureTerrainRID, textureTerrainGID, textureTerrainBID, textureTerrainBlendMapID;
 GLuint textureParticleFountainID, textureParticleFireID, texId;
 GLuint skyboxTextureID;
@@ -1231,10 +2023,17 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 		{&modelAda_enfundar,"../Modelos/Ada Wong/Enfundar.dae"},
 		{&modelAda_idle,"../Modelos/Ada Wong/Idle.dae"},
 		{&modelAda_levatarse_apuntando,"../Modelos/Ada Wong/Levantarse apuntando.dae"},
-		//{&modelAda_muerta,"../Modelos/Ada Wong/Muerta.dae"},
-		//{&modelAda_muriendo,"../Modelos/Ada Wong/Muriendo.dae"},
-		//{&modelAda_recibir_golpe,"../Modelos/Ada Wong/Recibir golpe.dae"},
-		{&modelAda_saltar,"../Modelos/Ada Wong/Saltar.dae"}
+		{&modelAda_muerta,"../Modelos/Ada Wong/Muerta.dae"},
+		{&modelAda_muriendo,"../Modelos/Ada Wong/Muriendo.dae"},
+		{&modelAda_recibir_golpe,"../Modelos/Ada Wong/Recibir golpe.dae"},
+		{&modelAda_saltar,"../Modelos/Ada Wong/Saltar.dae"},
+		{&modelAda_encender_generador,"../Modelos/Ada Wong/Encendiendo generador.dae"},
+
+		{&modelPhantom_ataque,"../Modelos/Fantasma/Ataque.dae"},
+		{&modelPhantom_caminar,"../Modelos/Fantasma/Caminar.dae"},
+		{&modelPhantom_correr,"../Modelos/Fantasma/Correr.dae"},
+		{&modelPhantom_idle,"../Modelos/Fantasma/Idle.dae"},
+		{&modelPhantom_muriendo,"../Modelos/Fantasma/Muriendo.dae"}
 	};
 
 	std::vector<std::thread> threads;
@@ -1254,8 +2053,19 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 		(*(model.first)).loadMeshesSequential();
 	}
 
-	modelPhantom.loadModel("../Modelos/Fantasma-monstruo/phantom/zombie walk.dae");
-	modelPhantom.setShader(&shaderMulLighting);
+	modelArbol.loadModel("../Modelos/Pino/pino.obj");
+	modelArbol.setShader(&shaderMulLighting);
+	modelArbol_2.loadModel("../Modelos/Arbol/Spruce.obj");
+	modelArbol_2.setShader(&shaderMulLighting);
+	modelArbusto.loadModel("../Modelos/Arbusto/arbusto.obj");
+	modelArbusto.setShader(&shaderMulLighting);
+
+	modelFlecha.loadModel("../Modelos/Flecha/FLECHA.obj");
+	modelFlecha.setShader(&shaderMulLighting);
+
+	modelGenerador.loadModel("../Modelos/Generador/GENERADOR.obj");
+	modelGenerador.setShader(&shaderMulLighting);
+
 
 	modelAda_agacharse_apuntando.setShader(&shaderMulLighting);
 	modelAda_apuntar_agachado.setShader(&shaderMulLighting);
@@ -1277,6 +2087,13 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 	modelAda_muriendo.setShader(&shaderMulLighting);
 	modelAda_recibir_golpe.setShader(&shaderMulLighting);
 	modelAda_saltar.setShader(&shaderMulLighting);
+	modelAda_encender_generador.setShader(&shaderMulLighting);
+
+	modelPhantom_ataque.setShader(&shaderMulLighting);
+	modelPhantom_caminar.setShader(&shaderMulLighting);
+	modelPhantom_correr.setShader(&shaderMulLighting);
+	modelPhantom_idle.setShader(&shaderMulLighting);
+	modelPhantom_muriendo.setShader(&shaderMulLighting);
 
 	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Agacharse_apuntando, modelAda_agacharse_apuntando);
 	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Apuntar_agachado, modelAda_apuntar_agachado);
@@ -1298,6 +2115,23 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Muriendo, modelAda_muriendo);
 	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Recibir_golpe, modelAda_recibir_golpe);
 	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Saltar, modelAda_saltar);
+	estadoPersonaje.mapearAccion(EstadoPersonaje::Estados_Personaje::Encenciendo_generador, modelAda_encender_generador);
+
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Atacando, modelPhantom_ataque);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Guardia, modelPhantom_caminar);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Idle, modelPhantom_idle);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Muerto, modelPhantom_muriendo);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Muriendo, modelPhantom_muriendo);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Persecusion, modelPhantom_correr);
+	Enemigo::mapearAccion(Enemigo::Estados_Enemigo::Sospecha, modelPhantom_idle);
+
+	// Generadores
+	generadores.push_back(Generador{ .posicion = glm::vec3(-646.87f, 0.0f, 206.25f) });
+	generadores[0].posicion.y = terrain.getHeightTerrain(generadores[0].posicion.x, generadores[0].posicion.z);
+	generadores.push_back(Generador{ .posicion = glm::vec3(250.0f, 0.0f, 290.62f) });
+	generadores[1].posicion.y = terrain.getHeightTerrain(generadores[1].posicion.x, generadores[1].posicion.z);
+	generadores.push_back(Generador{ .posicion = glm::vec3(540.0f, 0.0f, -434.37f) });
+	generadores[2].posicion.y = terrain.getHeightTerrain(generadores[2].posicion.x, generadores[2].posicion.z);
 
 	//Linterna
 	modelLinterna.loadModel("../Modelos/Linterna_Dos_Manos/linterna.obj");
@@ -1529,6 +2363,56 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 	// Libera la memoria de la textura
 	textureStart.freeImage(bitmap);
 
+	//UI
+	GLuint vida3_ID, vida2_ID, vida1_ID, vida0_ID;
+	std::map<GLuint*, std::string> mapaVida =
+	{
+		{&vida3_ID, "../Textures/Pantallas/life_0.png"},
+		{&vida2_ID, "../Textures/Pantallas/life_1.png"},
+		{&vida1_ID, "../Textures/Pantallas/life_2.png"},
+		{&vida0_ID, "../Textures/Pantallas/life_3.png"}
+	};
+
+	for (auto &it : mapaVida)
+	{
+		Texture textureStart(it.second);
+		// Carga el mapa de bits (FIBITMAP es el tipo de dato de la libreria)
+		bitmap = textureStart.loadImage();
+		// Convertimos el mapa de bits en un arreglo unidimensional de tipo unsigned char
+		data = textureStart.convertToData(bitmap, imageWidth,
+			imageHeight);
+		// Creando la textura con id 1
+		glGenTextures(1, it.first);
+		// Enlazar esa textura a una tipo de textura de 2D.
+		glBindTexture(GL_TEXTURE_2D, *it.first);
+		// set the texture wrapping parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+		// set texture filtering parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// Verifica si se pudo abrir la textura
+		if (data) {
+			// Transferis los datos de la imagen a memoria
+			// Tipo de textura, Mipmaps, Formato interno de openGL, ancho, alto, Mipmaps,
+			// Formato interno de la libreria de la imagen, el tipo de dato y al apuntador
+			// a los datos
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0,
+				GL_BGRA, GL_UNSIGNED_BYTE, data);
+			// Generan los niveles del mipmap (OpenGL es el ecargado de realizarlos)
+			glGenerateMipmap(GL_TEXTURE_2D);
+		}
+		else
+			std::cout << "Failed to load texture" << std::endl;
+		// Libera la memoria de la textura
+		textureStart.freeImage(bitmap);
+	}
+	
+	estadoPersonaje.mapaVidaUI[3] = vida3_ID;
+	estadoPersonaje.mapaVidaUI[2] = vida2_ID;
+	estadoPersonaje.mapaVidaUI[1] = vida1_ID;
+	estadoPersonaje.mapaVidaUI[0] = vida0_ID;
+
 
 	Texture textureParticlesFountain("../Textures/bluewater.png");
 	bitmap = textureParticlesFountain.loadImage();
@@ -1660,7 +2544,7 @@ void init(int width, int height, std::string strTitle, bool bFullScreen) {
 	// Generate buffers, or else no sound will happen!
 	alGenBuffers(NUM_BUFFERS, buffer);
 	buffer[0] = alutCreateBufferFromFile("../sounds/fountain.wav");
-	buffer[1] = alutCreateBufferFromFile("../sounds/fire.wav");
+	buffer[1] = alutCreateBufferFromFile("../sounds/fire_1.wav");
 	buffer[2] = alutCreateBufferFromFile("../sounds/darth_vader.wav");
 	int errorAlut = alutGetError();
 	if (errorAlut != ALUT_ERROR_NO_ERROR){
@@ -1923,6 +2807,28 @@ bool processInput(bool continueApplication) {
 	offsetX = 0;
 	offsetY = 0;	
 
+	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+	{
+
+		for (int i = 0; i < generadores.size(); ++i)
+		{
+			if (glm::distance(glm::vec3(modelMatrixAda[3]), generadores[i].posicion) < 5.0f)
+			{
+				accionesPersonaje.encendiendo = true;
+				accionesPersonaje.generador_interaccion = i;
+				break;
+			}
+			else
+			{
+				accionesPersonaje.encendiendo = false;
+			}
+		}
+
+	}
+	else
+	{
+		accionesPersonaje.encendiendo = false;
+	}
 
 	if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
 	{
@@ -2141,6 +3047,8 @@ void applicationLoop() {
 	modelMatrixFountain = glm::scale(modelMatrixFountain, glm::vec3(10.0f, 10.0f, 10.0f));
 
 	//modelMatrixAda = glm::scale(modelMatrixAda, glm::vec3(0.03f));
+	modelMatrixAda = glm::translate(modelMatrixAda, glm::vec3(-628.12f, 0.0f, -650.0f));
+	modelMatrixAda[3][1] = terrain.getHeightTerrain(modelMatrixAda[3][0], modelMatrixAda[3][2]);
 
 	lastTime = TimeManager::Instance().GetTime();
 
@@ -2153,6 +3061,12 @@ void applicationLoop() {
 
 	glm::vec3 lightPos = glm::vec3(10.0, 10.0, 0.0);
 
+	// Lista de enemigos
+	enemigos = new Conjunto_Enemigos(40, 100);
+
+	// Vegetacion
+	vegetacion = new Vegetacion(20, 20, 200, modelArbol, modelArbol_2, modelArbusto);
+
 	while (psi) {
 		currTime = TimeManager::Instance().GetTime();
 		if (currTime - lastTime < 1.0f / 60.0f) {
@@ -2162,6 +3076,7 @@ void applicationLoop() {
 		lastTime = currTime;
 		TimeManager::Instance().CalculateFrameRate(true);
 		deltaTime = TimeManager::Instance().DeltaTime;
+		Enemigo::deltaTime = deltaTime;
 
 		glfwPollEvents();
 		psi = processInput(true);
@@ -2261,11 +3176,14 @@ void applicationLoop() {
 		 * Propiedades de neblina
 		 *******************************************/
 		shaderMulLighting.setVectorFloat3("fogColor", glm::value_ptr(glm::vec3(0.5, 0.5, 0.4)));
-		shaderMulLighting.setFloat("density", 0.01f);
+		shaderMulLighting.setFloat("density", 0.008f);
+		shaderMulLighting.setFloat("gradient", 1.5f);
 		shaderTerrain.setVectorFloat3("fogColor", glm::value_ptr(glm::vec3(0.5, 0.5, 0.4)));
-		shaderTerrain.setFloat("density", 0.01f);
+		shaderTerrain.setFloat("density", 0.008f);
+		shaderMulLighting.setFloat("gradient", 1.5f);
 		shaderSkybox.setVectorFloat3("fogColor", glm::value_ptr(glm::vec3(0.5, 0.5, 0.4)));
-		shaderSkybox.setFloat("density", 0.01f);
+		shaderSkybox.setFloat("density", 0.008f);
+		shaderMulLighting.setFloat("gradient", 1.5f);
 
 		/*******************************************
 		 * Propiedades Luz direccional
@@ -2292,31 +3210,78 @@ void applicationLoop() {
 		glm::vec3 spotPosition = glm::vec3(modelMatrixLinterna[3]);
 		shaderMulLighting.setInt("spotLightCount", 1);
 		shaderTerrain.setInt("spotLightCount", 1);
+		auto [intensity, angleCutOff, angleOuterCutOff] = estadoPersonaje.intensidadYAngulosLinterna();
 		shaderMulLighting.setVectorFloat3("spotLights[0].light.ambient", glm::value_ptr(glm::vec3(0.0, 0.0, 0.0)));
-		shaderMulLighting.setVectorFloat3("spotLights[0].light.diffuse", glm::value_ptr(glm::vec3(0.8, 0.9, 0.8)));
-		shaderMulLighting.setVectorFloat3("spotLights[0].light.specular", glm::value_ptr(glm::vec3(0.3, 0.3, 0.3)));
+		shaderMulLighting.setVectorFloat3("spotLights[0].light.diffuse", glm::value_ptr(glm::vec3(intensity, intensity, intensity)));
+		shaderMulLighting.setVectorFloat3("spotLights[0].light.specular", glm::value_ptr(glm::vec3(intensity * 0.4f, intensity * 0.4f, intensity * 0.4f)));
 		shaderMulLighting.setVectorFloat3("spotLights[0].position", glm::value_ptr(spotPosition * (estadoPersonaje.tienePistola() ? 1.0f : 100.0f)));
 		shaderMulLighting.setVectorFloat3("spotLights[0].direction", glm::value_ptr(direccionLinterna));
 		shaderMulLighting.setFloat("spotLights[0].constant", 1.0);
 		shaderMulLighting.setFloat("spotLights[0].linear", 0.0014 * 0.5f);
 		shaderMulLighting.setFloat("spotLights[0].quadratic", 0.000007 * 0.5f);
-		shaderMulLighting.setFloat("spotLights[0].cutOff", cos(glm::radians(12.0f)));
-		shaderMulLighting.setFloat("spotLights[0].outerCutOff", cos(glm::radians(17.0f)));
+		shaderMulLighting.setFloat("spotLights[0].cutOff", cos(glm::radians(angleCutOff)));
+		shaderMulLighting.setFloat("spotLights[0].outerCutOff", cos(glm::radians(angleOuterCutOff)));
 		shaderTerrain.setVectorFloat3("spotLights[0].light.ambient", glm::value_ptr(glm::vec3(0.0, 0.0, 0.0)));
-		shaderTerrain.setVectorFloat3("spotLights[0].light.diffuse", glm::value_ptr(glm::vec3(0.8, 0.9, 0.8)));
-		shaderTerrain.setVectorFloat3("spotLights[0].light.specular", glm::value_ptr(glm::vec3(0.3, 0.3, 0.3)));
+		shaderTerrain.setVectorFloat3("spotLights[0].light.diffuse", glm::value_ptr(glm::vec3(intensity, intensity, intensity)));
+		shaderTerrain.setVectorFloat3("spotLights[0].light.specular", glm::value_ptr(glm::vec3(intensity * 0.4f, intensity * 0.4f, intensity * 0.4f)));
 		shaderTerrain.setVectorFloat3("spotLights[0].position", glm::value_ptr(spotPosition * (estadoPersonaje.tienePistola() ? 1.0f : 100.0f)));
 		shaderTerrain.setVectorFloat3("spotLights[0].direction", glm::value_ptr(direccionLinterna));
 		shaderTerrain.setFloat("spotLights[0].constant", 1.0);
 		shaderTerrain.setFloat("spotLights[0].linear", 0.0014 * 0.5f);
 		shaderTerrain.setFloat("spotLights[0].quadratic", 0.000007 * 0.5f);
-		shaderTerrain.setFloat("spotLights[0].cutOff", cos(glm::radians(12.0f)));
-		shaderTerrain.setFloat("spotLights[0].outerCutOff", cos(glm::radians(17.0f)));
+		shaderTerrain.setFloat("spotLights[0].cutOff", cos(glm::radians(angleCutOff)));
+		shaderTerrain.setFloat("spotLights[0].outerCutOff", cos(glm::radians(angleOuterCutOff)));
 
 		/*******************************************
 		 * Propiedades PointLights
 		 *******************************************/
-		shaderMulLighting.setInt("pointLightCount", lamp1Position.size() + lamp2Orientation.size());
+		shaderMulLighting.setInt("pointLightCount", 3);
+		shaderTerrain.setInt("pointLightCount", 3);
+		for (int i = 0; i < lamp1Position.size(); i++) {
+			glm::mat4 matrixAdjustLamp = glm::mat4(1.0f);
+			matrixAdjustLamp = glm::translate(matrixAdjustLamp, generadores[i].posicion);
+			//matrixAdjustLamp = glm::rotate(matrixAdjustLamp, glm::radians(lamp1Orientation[i]), glm::vec3(0, 1, 0));
+			//matrixAdjustLamp = glm::scale(matrixAdjustLamp, glm::vec3(0.5, 0.5, 0.5));
+			matrixAdjustLamp = glm::translate(matrixAdjustLamp, glm::vec3(0, 10.3585, 0));
+			glm::vec3 lampPosition = glm::vec3(matrixAdjustLamp[3]);
+
+			if (generadores[i].activado)
+			{
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.ambient", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.diffuse", glm::value_ptr(glm::vec3(0.9, 0.8, 0.9)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.specular", glm::value_ptr(glm::vec3(0.6, 0.58, 0.03)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].position", glm::value_ptr(lampPosition));
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0);
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.0014 * 0.5f);
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.000007 * 0.5f);
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.ambient", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.diffuse", glm::value_ptr(glm::vec3(0.9, 0.8, 0.9)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.specular", glm::value_ptr(glm::vec3(0.6, 0.58, 0.03)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].position", glm::value_ptr(lampPosition));
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0);
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.0014 * 0.5f);
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.000007 * 0.5f);
+			}
+			else
+			{
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.ambient", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.diffuse", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.specular", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderMulLighting.setVectorFloat3("pointLights[" + std::to_string(i) + "].position", glm::value_ptr(lampPosition));
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0);
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.0014 * 0.5f);
+				shaderMulLighting.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.000007 * 0.5f);
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.ambient", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.diffuse", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].light.specular", glm::value_ptr(glm::vec3(0.2, 0.16, 0.01)));
+				shaderTerrain.setVectorFloat3("pointLights[" + std::to_string(i) + "].position", glm::value_ptr(lampPosition));
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0);
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.0014 * 0.5f);
+				shaderTerrain.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.000007 * 0.5f);
+			}
+			
+		}
+		/*shaderMulLighting.setInt("pointLightCount", lamp1Position.size() + lamp2Orientation.size());
 		shaderTerrain.setInt("pointLightCount", lamp1Position.size() + lamp2Orientation.size());
 		for (int i = 0; i < lamp1Position.size(); i++){
 			glm::mat4 matrixAdjustLamp = glm::mat4(1.0f);
@@ -2361,7 +3326,7 @@ void applicationLoop() {
 			shaderTerrain.setFloat("pointLights[" + std::to_string(lamp1Position.size() + i) + "].constant", 1.0);
 			shaderTerrain.setFloat("pointLights[" + std::to_string(lamp1Position.size() + i) + "].linear", 0.09);
 			shaderTerrain.setFloat("pointLights[" + std::to_string(lamp1Position.size() + i) + "].quadratic", 0.02);
-		}
+		}*/
 
 		if (!iniciaPartida)
 		{
@@ -2379,20 +3344,27 @@ void applicationLoop() {
 			continue;
 		}
 
+		//shaderTexture.setMatrix4("projection", 1, false,
+		//	glm::value_ptr(projection));
+		//shaderTexture.setMatrix4("view", 1, false,
+		//	glm::value_ptr(glm::mat4(glm::mat3(view))));
+
+		enemigos->actualizarEstado(glm::vec3(modelMatrixAda[3]));
+
 		/*******************************************
 		 * 1.- We render the depth buffer
 		 *******************************************/
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		// render scene from light's point of view
-		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		//glCullFace(GL_FRONT);
-		prepareDepthScene();
-		renderScene(false);
-		//glCullFace(GL_BACK);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		//glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		//// render scene from light's point of view
+		//glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+		//glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+		//glClear(GL_DEPTH_BUFFER_BIT);
+		////glCullFace(GL_FRONT);
+		//prepareDepthScene();
+		//renderScene(false);
+		////glCullFace(GL_BACK);
+		//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		/*******************************************
 		 * 2.- We render the normal objects
@@ -2425,6 +3397,174 @@ void applicationLoop() {
 		 * Creacion de colliders
 		 * IMPORTANT do this before interpolations
 		 *******************************************/
+		// Collider Ada
+		AbstractModel::OBB adaCollider;
+		glm::mat4 modelmatrixColliderAda = glm::mat4(modelMatrixAda);
+		// Set the orientation of collider before doing the scale
+		adaCollider.u = glm::quat_cast(modelmatrixColliderAda);
+		modelmatrixColliderAda = glm::scale(modelmatrixColliderAda, glm::vec3(0.03f, 0.03f, 0.03f));
+		modelmatrixColliderAda = glm::translate(modelmatrixColliderAda,
+			glm::vec3(estadoPersonaje.modeloEstadoActual()->getObb().c.x,
+				estadoPersonaje.modeloEstadoActual()->getObb().c.y,
+				estadoPersonaje.modeloEstadoActual()->getObb().c.z));
+		adaCollider.e = estadoPersonaje.modeloEstadoActual()->getObb().e * glm::vec3(0.03f, 0.03f, 0.03f) /** glm::vec3(0.787401574, 0.787401574, 0.787401574)*/;
+		adaCollider.c = glm::vec3(modelmatrixColliderAda[3]);
+		addOrUpdateColliders(collidersOBB, "ada", adaCollider, modelMatrixAda);
+
+		////Colliders arboles
+		//for (auto& planta : vegetacion->posicionesArboles)
+		//{
+		//	/*if (planta.first > 200.0f)
+		//		break;*/
+
+		//	AbstractModel::OBB plantaCollider;
+		//	glm::mat4 modelmatrixColliderPlanta = glm::mat4(planta.matrix);
+		//	// Set the orientation of collider before doing the scale
+		//	plantaCollider.u = glm::quat_cast(modelmatrixColliderPlanta);
+		//	modelmatrixColliderPlanta = glm::scale(modelmatrixColliderPlanta, glm::vec3(3.0f));
+		//	modelmatrixColliderPlanta = glm::translate(modelmatrixColliderPlanta,
+		//		glm::vec3(vegetacion->arbol->getObb().c.x,
+		//			vegetacion->arbol->getObb().c.y,
+		//			vegetacion->arbol->getObb().c.z));
+		//	plantaCollider.e = vegetacion->arbol->getObb().e * glm::vec3(3.0f) /** glm::vec3(0.787401574, 0.787401574, 0.787401574)*/;
+		//	plantaCollider.c = glm::vec3(modelmatrixColliderPlanta[3]);
+		//	addOrUpdateColliders(collidersOBB, planta.id, plantaCollider, planta.matrix);
+		//}
+
+		//for (auto& planta : vegetacion->mapaArboles_2)
+		//{
+		//	glm::mat4 modelMatrixColliderPlanta = glm::mat4(planta.second->matrix);
+		//	AbstractModel::OBB aircraftCollider;
+		//	// Set the orientation of collider before doing the scale
+		//	aircraftCollider.u = glm::quat_cast(planta.second->matrix);
+		//	modelMatrixColliderPlanta = glm::translate(modelMatrixColliderPlanta, glm::vec3(0.0f, -2.0f, 0.0f));
+		//	modelMatrixColliderPlanta = glm::scale(modelMatrixColliderPlanta,
+		//		glm::vec3(2.0f));
+		//	modelMatrixColliderPlanta = glm::translate(
+		//		modelMatrixColliderPlanta, vegetacion->arbol_2->getObb().c);
+		//	modelMatrixColliderPlanta = glm::rotate(modelMatrixColliderPlanta, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		//	aircraftCollider.c = glm::vec3(modelMatrixColliderPlanta[3]);
+		//	aircraftCollider.e = vegetacion->arbol_2->getObb().e * glm::vec3(2.0f);
+		//	addOrUpdateColliders(collidersOBB, planta.second->id, aircraftCollider, planta.second->matrix);
+		//}
+		
+
+		for (const auto &enemigo : enemigos->getEnemiesMap())
+		{
+			if (enemigo.first > 150.0f)
+				break;
+
+			if (enemigo.second->estado_actual == Enemigo::Estados_Enemigo::Muerto)
+			{
+				auto it = collidersOBB.find(enemigo.second->id);
+				if (it != collidersOBB.end())
+					collidersOBB.erase(it);
+				continue;
+			}
+
+			AbstractModel::OBB phantomCollider;
+			glm::mat4 modelmatrixColliderPhantom = glm::mat4(enemigo.second->enemyModelMatrix);
+			//modelmatrixColliderPhantom = glm::rotate(modelmatrixColliderPhantom, glm::radians(90.0f), glm::vec3(0.0, 0.0f, 1.0f));
+			// Set the orientation of collider before doing the scale
+			phantomCollider.u = glm::quat_cast(modelmatrixColliderPhantom);
+			modelmatrixColliderPhantom = glm::scale(modelmatrixColliderPhantom, enemigo.second->sizeBase * glm::vec3(0.2f, 1.0f, 1.0f));
+			modelmatrixColliderPhantom = glm::translate(modelmatrixColliderPhantom,
+				glm::vec3(modelPhantom_idle.getObb().c.x,
+					modelPhantom_idle.getObb().c.y,
+					modelPhantom_idle.getObb().c.z));
+			modelmatrixColliderPhantom = glm::translate(modelmatrixColliderPhantom, glm::vec3(0.0f, -1.0f, 0.0f));
+			phantomCollider.e = modelPhantom_idle.getObb().e * enemigo.second->sizeBase * glm::vec3(0.2f, 1.0f, 1.0f);
+			phantomCollider.c = glm::vec3(modelmatrixColliderPhantom[3]);
+			addOrUpdateColliders(collidersOBB, enemigo.second->id, phantomCollider, enemigo.second->enemyModelMatrix);
+		}
+
+		// Colisiones spotlight
+		float multiplicadorIntensidad = 1.0f / estadoPersonaje.multiplicadorDamage();
+		float radioActual = multiplicadorIntensidad;
+		float distanciaAcumulada = multiplicadorIntensidad / 2.0f;
+		glm::mat4 modelMatrixColliderSphere = glm::mat4(1.0f);
+		AbstractModel::SBB sphereLightCollider;
+		if (estadoPersonaje.tienePistola())
+		{
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, spotPosition + direccionLinterna * distanciaAcumulada);
+			distanciaAcumulada += radioActual / 2.0f;
+		}
+		else
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, glm::vec3(0.0f, 1000.0f, 0.0f));
+		modelMatrixColliderSphere = glm::scale(modelMatrixColliderSphere, glm::vec3(radioActual / 2.0f));
+		sphereLightCollider.c = glm::vec3(modelMatrixColliderSphere[3]);
+		sphereLightCollider.ratio = radioActual;
+		addOrUpdateColliders(collidersSBB, "sphere1", sphereLightCollider, glm::mat4(1.0f));
+
+		radioActual *= 2.0f;
+		distanciaAcumulada += radioActual / 2.0f;
+
+		modelMatrixColliderSphere = glm::mat4(1.0f);
+		sphereLightCollider = AbstractModel::SBB();
+		if (estadoPersonaje.tienePistola())
+		{
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, spotPosition + direccionLinterna * distanciaAcumulada);
+			distanciaAcumulada += radioActual / 2.0f;			
+		}
+		else
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, glm::vec3(0.0f, 1000.0f, 0.0f));
+		modelMatrixColliderSphere = glm::scale(modelMatrixColliderSphere, glm::vec3(radioActual / 2.0f));
+		sphereLightCollider.c = glm::vec3(modelMatrixColliderSphere[3]);
+		sphereLightCollider.ratio = radioActual;
+		addOrUpdateColliders(collidersSBB, "sphere2", sphereLightCollider, glm::mat4(1.0f));
+
+		radioActual *= 2.0f;
+		distanciaAcumulada += radioActual / 2.0f;
+
+		modelMatrixColliderSphere = glm::mat4(1.0f);
+		sphereLightCollider = AbstractModel::SBB();
+		if (estadoPersonaje.tienePistola())
+		{
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, spotPosition + direccionLinterna * distanciaAcumulada);
+			distanciaAcumulada += radioActual / 2.0f;
+		}
+		else
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, glm::vec3(0.0f, 1000.0f, 0.0f));
+		modelMatrixColliderSphere = glm::scale(modelMatrixColliderSphere, glm::vec3(radioActual / 2.0f));
+		sphereLightCollider.c = glm::vec3(modelMatrixColliderSphere[3]);
+		sphereLightCollider.ratio = radioActual;
+		addOrUpdateColliders(collidersSBB, "sphere3", sphereLightCollider, glm::mat4(1.0f));
+
+		radioActual *= 2.0f;
+		distanciaAcumulada += radioActual / 2.0f;
+
+		modelMatrixColliderSphere = glm::mat4(1.0f);
+		sphereLightCollider = AbstractModel::SBB();
+		if (estadoPersonaje.tienePistola())
+		{
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, spotPosition + direccionLinterna * distanciaAcumulada);
+			distanciaAcumulada += radioActual / 2.0f;
+		}
+		else
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, glm::vec3(0.0f, 1000.0f, 0.0f));
+		modelMatrixColliderSphere = glm::scale(modelMatrixColliderSphere, glm::vec3(radioActual / 2.0f));
+		sphereLightCollider.c = glm::vec3(modelMatrixColliderSphere[3]);
+		sphereLightCollider.ratio = radioActual;
+		addOrUpdateColliders(collidersSBB, "sphere4", sphereLightCollider, glm::mat4(1.0f));
+
+		radioActual *= 2.0f;
+		distanciaAcumulada += radioActual / 2.0f;
+
+		modelMatrixColliderSphere = glm::mat4(1.0f);
+		sphereLightCollider = AbstractModel::SBB();
+		if (estadoPersonaje.tienePistola())
+		{
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, spotPosition + direccionLinterna * distanciaAcumulada);
+			distanciaAcumulada += radioActual / 2.0f;
+		}
+		else
+			modelMatrixColliderSphere = glm::translate(modelMatrixColliderSphere, glm::vec3(0.0f, 1000.0f, 0.0f));
+		modelMatrixColliderSphere = glm::scale(modelMatrixColliderSphere, glm::vec3(radioActual / 2.0f));
+		sphereLightCollider.c = glm::vec3(modelMatrixColliderSphere[3]);
+		sphereLightCollider.ratio = radioActual;
+		addOrUpdateColliders(collidersSBB, "sphere5", sphereLightCollider, glm::mat4(1.0f));
+
+
 		// Collider del dart vader lego
 		glm::mat4 modelmatrixColliderDart = glm::mat4(modelMatrixDart);
 		AbstractModel::OBB dartLegoBodyCollider;
@@ -2516,30 +3656,44 @@ void applicationLoop() {
 		/*******************************************
 		 * Render de colliders
 		 *******************************************/
-		for (std::map<std::string, std::tuple<AbstractModel::OBB, glm::mat4, glm::mat4> >::iterator it =
-				collidersOBB.begin(); it != collidersOBB.end(); it++) {
-			glm::mat4 matrixCollider = glm::mat4(1.0);
-			matrixCollider = glm::translate(matrixCollider, std::get<0>(it->second).c);
-			matrixCollider = matrixCollider * glm::mat4(std::get<0>(it->second).u);
-			matrixCollider = glm::scale(matrixCollider, std::get<0>(it->second).e * 2.0f);
-			boxCollider.setColor(glm::vec4(1.0, 1.0, 1.0, 1.0));
-			boxCollider.enableWireMode();
-			boxCollider.render(matrixCollider);
-		}
+		//for (std::map<std::string, std::tuple<AbstractModel::OBB, glm::mat4, glm::mat4> >::iterator it =
+		//		collidersOBB.begin(); it != collidersOBB.end(); it++) {
+		//	glm::mat4 matrixCollider = glm::mat4(1.0);
+		//	matrixCollider = glm::translate(matrixCollider, std::get<0>(it->second).c);
+		//	matrixCollider = matrixCollider * glm::mat4(std::get<0>(it->second).u);
+		//	matrixCollider = glm::scale(matrixCollider, std::get<0>(it->second).e * 2.0f);
+		//	boxCollider.setColor(glm::vec4(1.0, 1.0, 1.0, 1.0));
+		//	boxCollider.enableWireMode();
+		//	boxCollider.render(matrixCollider);
+		//}
 
-		for (std::map<std::string, std::tuple<AbstractModel::SBB, glm::mat4, glm::mat4> >::iterator it =
-				collidersSBB.begin(); it != collidersSBB.end(); it++) {
-			glm::mat4 matrixCollider = glm::mat4(1.0);
-			matrixCollider = glm::translate(matrixCollider, std::get<0>(it->second).c);
-			matrixCollider = glm::scale(matrixCollider, glm::vec3(std::get<0>(it->second).ratio * 2.0f));
-			sphereCollider.setColor(glm::vec4(1.0, 1.0, 1.0, 1.0));
-			sphereCollider.enableWireMode();
-			sphereCollider.render(matrixCollider);
-		}
+		//for (std::map<std::string, std::tuple<AbstractModel::SBB, glm::mat4, glm::mat4> >::iterator it =
+		//		collidersSBB.begin(); it != collidersSBB.end(); it++) {
+		//	glm::mat4 matrixCollider = glm::mat4(1.0);
+		//	matrixCollider = glm::translate(matrixCollider, std::get<0>(it->second).c);
+		//	matrixCollider = glm::scale(matrixCollider, glm::vec3(std::get<0>(it->second).ratio * 2.0f));
+		//	sphereCollider.setColor(glm::vec4(1.0, 1.0, 1.0, 1.0));
+		//	sphereCollider.enableWireMode();
+		//	sphereCollider.render(matrixCollider);
+		//}
 
 		/*******************************************
 		 * Test Colisions
 		 *******************************************/
+
+		//for (std::map<std::string, std::tuple<AbstractModel::OBB, glm::mat4, glm::mat4> >::iterator it =
+		//	collidersOBB.begin(); it != collidersOBB.end(); it++) {
+
+		//	if (!estadoPersonaje.tienePistola())
+		//		break;
+
+		//	if (it->first == "ada")
+		//		continue;
+
+		//	if (rayOBBIntersect(spotPosition, direccionLinterna, std::get<0>(it->second)))
+		//		std::cout << "Hay colision el rayo con: " << it->first << std::endl;
+		//}
+
 		for (std::map<std::string,
 				std::tuple<AbstractModel::OBB, glm::mat4, glm::mat4> >::iterator it =
 				collidersOBB.begin(); it != collidersOBB.end(); it++) {
@@ -2550,8 +3704,7 @@ void applicationLoop() {
 				if (it != jt
 						&& testOBBOBB(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with "
-							<< jt->first << std::endl;
+					std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
 					isCollision = true;
 				}
 			}
@@ -2568,8 +3721,7 @@ void applicationLoop() {
 				if (it != jt
 						&& testSphereSphereIntersection(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with "
-							<< jt->first << std::endl;
+					std::cout << "Colision " << it->first << " with "<< jt->first << std::endl;
 					isCollision = true;
 				}
 			}
@@ -2586,8 +3738,45 @@ void applicationLoop() {
 			for (; jt != collidersOBB.end(); jt++) {
 				if (testSphereOBox(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with "
-							<< jt->first << std::endl;
+					std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
+
+					auto itEnemigo = enemigos->nameList.find(jt->first);
+					if (itEnemigo != enemigos->nameList.end())
+					{
+
+						if (it->first == "sphere1")
+						{
+							itEnemigo->second->reducirSalud(estadoPersonaje.multiplicadorDamage() * 4.0f);
+							//std::cout << "Vida: " << itEnemigo->second->saludBase << " daño: " << estadoPersonaje.multiplicadorDamage() * 4.0f << std::endl;
+						}
+						else if (it->first == "sphere2")
+						{
+							itEnemigo->second->reducirSalud(estadoPersonaje.multiplicadorDamage() * 2.0f);
+							//std::cout << "Vida: " << itEnemigo->second->saludBase << " daño: " << estadoPersonaje.multiplicadorDamage() * 4.0f << std::endl;
+						}
+						else if (it->first == "sphere3")
+						{
+							itEnemigo->second->reducirSalud(estadoPersonaje.multiplicadorDamage() * 1.0f);
+							//std::cout << "Vida: " << itEnemigo->second->saludBase << " daño: " << estadoPersonaje.multiplicadorDamage() * 4.0f << std::endl;
+						}
+						else if (it->first == "sphere4")
+						{
+							itEnemigo->second->reducirSalud(estadoPersonaje.multiplicadorDamage() * 0.5f);
+							//std::cout << "Vida: " << itEnemigo->second->saludBase << " daño: " << estadoPersonaje.multiplicadorDamage() * 4.0f << std::endl;
+						}
+						else if (it->first == "sphere5")
+						{
+							itEnemigo->second->reducirSalud(estadoPersonaje.multiplicadorDamage() * 0.25f);
+							//std::cout << "Vida: " << itEnemigo->second->saludBase << " daño: " << estadoPersonaje.multiplicadorDamage() * 4.0f << std::endl;
+						}
+
+						continue;
+					}
+
+
+					if ((it->first == "sphere1" || it->first == "sphere2") && jt->first == "ada")
+						continue;
+
 					isCollision = true;
 					addOrUpdateCollisionDetection(collisionDetection, jt->first, isCollision);
 				}
@@ -2614,8 +3803,21 @@ void applicationLoop() {
 				else {
 					if (jt->first.compare("mayow") == 0)
 						modelMatrixMayow = std::get<1>(jt->second);
-					if (jt->first.compare("dart") == 0)
+					else if (jt->first.compare("dart") == 0)
 						modelMatrixDart = std::get<1>(jt->second);
+					else if (jt->first.compare("ada") == 0)
+						modelMatrixAda = std::get<1>(jt->second);
+					else
+					{
+						//auto itEnemigo = enemigos->nameList.find(jt->first);
+						//std::cout << jt->first << std::endl;
+						//if (itEnemigo == enemigos->nameList.end())
+							//continue;
+						
+						//itEnemigo->second->enemyModelMatrix = std::get<1>(jt->second);
+
+					}
+
 				}
 			}
 		}
@@ -2908,13 +4110,13 @@ void renderScene(bool renderParticles){
 
 
 	// Ada
+	accionesPersonaje.golpeada = enemigos->golpeAsestado(glm::vec3(modelMatrixAda[3]));
 	estadoPersonaje.actualizarEstado(accionesPersonaje);
 
 	//modelMatrixAda[3][1] = terrain.getHeightTerrain(modelMatrixAda[3][0], modelMatrixAda[3][2]);
 	modelMatrixAda[3][1] = -GRAVITY * tmv * tmv + 7.0 * tmv + terrain.getHeightTerrain(modelMatrixAda[3][0], modelMatrixAda[3][2]);
 	tmv = currTime - startTimeJump;
 	if (modelMatrixAda[3][1] < terrain.getHeightTerrain(modelMatrixAda[3][0], modelMatrixAda[3][2])) {
-		std::cout << "aterrizo" << std::endl;
 		isJump = false;
 		modelMatrixAda[3][1] = terrain.getHeightTerrain(modelMatrixAda[3][0], modelMatrixAda[3][2]);
 		estadoPersonaje.setAterrizo();
@@ -2952,7 +4154,7 @@ void renderScene(bool renderParticles){
 		glm::vec3 originFlash = glm::vec3((vertexesFromFlash[0] + vertexesFromFlash[1]) / 2.0f);
 		glm::vec3 directionFlash = originFlash - glm::vec3(vertexesFromFlash[2]);
 
-		direccionLinterna = directionFlash;
+		direccionLinterna = glm::normalize(directionFlash);
 
 		modelLinterna.render(modelMatrixLinterna);
 	}
@@ -2979,18 +4181,51 @@ void renderScene(bool renderParticles){
 		glm::vec3 originFlash = glm::vec3((vertexesFromFlash[0] + vertexesFromFlash[1]) / 2.0f);
 		glm::vec3 directionFlash = originFlash - glm::vec3(vertexesFromFlash[2]);
 
-		direccionLinterna = directionFlash;
+		direccionLinterna = glm::normalize(directionFlash);
 
 		modelLinterna.render(modelMatrixLinterna);
 	}
 
-	glm::mat4 modelMatrixFantasma(1.0f);
-	modelMatrixFantasma[3][1] = terrain.getHeightTerrain(0.0f, 0.0f);
-	modelPhantom.render(modelMatrixFantasma);
+	enemigos->render(glm::vec3(modelMatrixAda[3]));
+
+	vegetacion->render(glm::vec3(modelMatrixAda[3]));
+
+	glm::vec3 generadorDireccion(0.0f);
+	float distanciaMinima = 100000.0f;
+	for (Generador& generador : generadores)
+	{
+		float distancia = glm::distance(generador.posicion, glm::vec3(modelMatrixAda[3]));
+		if (!generador.activado && distancia < distanciaMinima) {
+			generadorDireccion = generador.posicion - camera->getPosition();
+
+			distanciaMinima = distancia;
+		}
+		
+		generador.render(modelGenerador);
+	}
+	std::cout << "distancia: " << distanciaMinima << "\n";
+	//if (distanciaMinima < 99999.0f)
+	//{
+
+	//	glm::vec2 v1(camera->front.x, camera->front.z);
+	//	glm::vec2 v2(generadorDireccion.x, generadorDireccion.z);
+	//	v1 = glm::normalize(v1);
+	//	v2 = glm::normalize(v2);
+	//	float dot = glm::dot(v1, v2);
+	//	float det = v1.x * v2.y - v2.x * v1.y;
+	//	float anguloDireccion = std::atan2(det, dot) + M_PI_2;
+
+	//	glm::mat4 modelMatrixFlecha(1.0f);
+	//	modelMatrixFlecha[3] = glm::vec4(glm::vec3(camera->getPosition() + camera->front * 0.5f + camera->up * 0.12f), 1.0f);
+	//	//modelMatrixFlecha[3] = glm::vec4(glm::vec3(modelMatrixAda[3] /*+ camera->up * 0.5f*/), 1.0f);
+	//	modelMatrixFlecha = glm::rotate(modelMatrixFlecha, anguloDireccion, glm::vec3(0.0f, 1.0f, 0.0f));
+	//	//modelMatrixFlecha = glm::rotate(modelMatrixFlecha, glm::radians(30.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+	//	modelMatrixFlecha = glm::scale(modelMatrixFlecha, glm::vec3(0.1f));
+
+	//	modelFlecha.render(modelMatrixFlecha);
+	//}
 
 	glEnable(GL_CULL_FACE);
-
-	
 
 
 	/**********
@@ -3145,12 +4380,21 @@ void renderScene(bool renderParticles){
 			 */
 		}
 
+		shaderTexture.setMatrix4("view", 1, false, glm::value_ptr(glm::mat4(1.0f)));
+		shaderTexture.setMatrix4("projection", 1, false, glm::value_ptr(glm::mat4(1.0f)));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, estadoPersonaje.mapaVidaUI[estadoPersonaje.salud]);
+		//glEnable(GL_BLEND);
+		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		boxIntro.render();
+
+
 	}
 	glEnable(GL_CULL_FACE);
 }
 
 int main(int argc, char **argv) {
-	init(800, 700, "Window GLFW", false);
+	init(1920, 1080, "Lights Out", false);
 	applicationLoop();
 	destroy();
 	return 1;
