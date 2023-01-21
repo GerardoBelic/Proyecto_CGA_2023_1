@@ -257,7 +257,7 @@ struct EstadoPersonaje
 		case Caminar_derecha:
 		case Correr:
 
-			if (acciones.golpeada && lastHit + 3.0f > TimeManager::Instance().GetRunningTime())
+			if (acciones.golpeada && lastHit + 3.0f < TimeManager::Instance().GetRunningTime())
 			{
 				--salud;
 				if (salud <= 0)
@@ -1098,6 +1098,7 @@ struct Enemigo
 	{
 		if (golpeLanzado && distanciaALaPosicion(posicionPersonaje) < 5.0f)
 		{
+			std::cout << "piii" << std::endl;
 			return true;
 		}
 
@@ -1212,11 +1213,15 @@ struct Conjunto_Enemigos
 	{
 		for (auto& enemigo : renderList)
 		{
-			if (enemigo.first > 20.0f)
+			if (enemigo.first > 50.0f)
 				break;
 
 			if (enemigo.second->golpeoPersonaje(posicionPersonaje))
+			{
 				return true;
+				std::cout << "aaa" << std::endl;
+			}
+				
 		}
 
 		return false;
@@ -3063,10 +3068,10 @@ void applicationLoop() {
 	glm::vec3 lightPos = glm::vec3(10.0, 10.0, 0.0);
 
 	// Lista de enemigos
-	enemigos = new Conjunto_Enemigos(40, 100);
+	enemigos = new Conjunto_Enemigos(40, 200);
 
 	// Vegetacion
-	vegetacion = new Vegetacion(20, 20, 200, modelArbol, modelArbol_2, modelArbusto);
+	vegetacion = new Vegetacion(30, 40, 300, modelArbol, modelArbol_2, modelArbusto);
 
 	while (psi) {
 		currTime = TimeManager::Instance().GetTime();
@@ -3705,7 +3710,7 @@ void applicationLoop() {
 				if (it != jt
 						&& testOBBOBB(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
+					//std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
 					isCollision = true;
 				}
 			}
@@ -3722,7 +3727,7 @@ void applicationLoop() {
 				if (it != jt
 						&& testSphereSphereIntersection(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with "<< jt->first << std::endl;
+					//std::cout << "Colision " << it->first << " with "<< jt->first << std::endl;
 					isCollision = true;
 				}
 			}
@@ -3739,7 +3744,7 @@ void applicationLoop() {
 			for (; jt != collidersOBB.end(); jt++) {
 				if (testSphereOBox(std::get<0>(it->second),
 								std::get<0>(jt->second))) {
-					std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
+					//std::cout << "Colision " << it->first << " with " << jt->first << std::endl;
 
 					auto itEnemigo = enemigos->nameList.find(jt->first);
 					if (itEnemigo != enemigos->nameList.end())
@@ -4199,32 +4204,40 @@ void renderScene(bool renderParticles){
 		if (!generador.activado && distancia < distanciaMinima) {
 			generadorDireccion = generador.posicion - camera->getPosition();
 
+			generadorDireccion = glm::rotate(generadorDireccion, camera->yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+
 			distanciaMinima = distancia;
 		}
 		
 		generador.render(modelGenerador);
 	}
 	std::cout << "distancia: " << distanciaMinima << "\n";
-	//if (distanciaMinima < 99999.0f)
-	//{
+	if (distanciaMinima < 99999.0f)
+	{
 
-	//	glm::vec2 v1(camera->front.x, camera->front.z);
-	//	glm::vec2 v2(generadorDireccion.x, generadorDireccion.z);
-	//	v1 = glm::normalize(v1);
-	//	v2 = glm::normalize(v2);
-	//	float dot = glm::dot(v1, v2);
-	//	float det = v1.x * v2.y - v2.x * v1.y;
-	//	float anguloDireccion = std::atan2(det, dot) + M_PI_2;
+		
 
-	//	glm::mat4 modelMatrixFlecha(1.0f);
-	//	modelMatrixFlecha[3] = glm::vec4(glm::vec3(camera->getPosition() + camera->front * 0.5f + camera->up * 0.12f), 1.0f);
-	//	//modelMatrixFlecha[3] = glm::vec4(glm::vec3(modelMatrixAda[3] /*+ camera->up * 0.5f*/), 1.0f);
-	//	modelMatrixFlecha = glm::rotate(modelMatrixFlecha, anguloDireccion, glm::vec3(0.0f, 1.0f, 0.0f));
-	//	//modelMatrixFlecha = glm::rotate(modelMatrixFlecha, glm::radians(30.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-	//	modelMatrixFlecha = glm::scale(modelMatrixFlecha, glm::vec3(0.1f));
+		glm::vec2 v1(camera->front.x, camera->front.z);
+		glm::vec2 v2(generadorDireccion.x, generadorDireccion.z);
+		v1 = glm::normalize(v1);
+		v2 = glm::normalize(v2);
+		float dot = glm::dot(v1, v2);
+		float det = v1.x * v2.y - v2.x * v1.y;
+		float anguloDireccion = std::atan2(det, dot) + M_PI_2;
+		std::cout << anguloDireccion << std::endl;
 
-	//	modelFlecha.render(modelMatrixFlecha);
-	//}
+		//float angulo2 = glm::angle(v1, v2);
+
+		glm::mat4 modelMatrixFlecha(1.0f);
+		modelMatrixFlecha[3] = glm::vec4(glm::vec3(camera->getPosition() + camera->front * 0.5f + camera->up * 0.12f), 1.0f);
+		//modelMatrixFlecha[3] = glm::vec4(glm::vec3(modelMatrixAda[3] /*+ camera->up * 0.5f*/), 1.0f);
+		//modelMatrixFlecha = glm::rotate(modelMatrixFlecha, (anguloDireccion - camera->yaw) - glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		modelMatrixFlecha = glm::rotate(modelMatrixFlecha, anguloDireccion + glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		//modelMatrixFlecha = glm::rotate(modelMatrixFlecha, glm::radians(30.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		modelMatrixFlecha = glm::scale(modelMatrixFlecha, glm::vec3(0.1f));
+
+		modelFlecha.render(modelMatrixFlecha);
+	}
 
 	glEnable(GL_CULL_FACE);
 
@@ -4395,7 +4408,7 @@ void renderScene(bool renderParticles){
 }
 
 int main(int argc, char **argv) {
-	init(800, 700, "Lights Out", false);
+	init(1920, 1080, "Lights Out", false);
 	applicationLoop();
 	destroy();
 	return 1;
